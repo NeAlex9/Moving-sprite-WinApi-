@@ -195,8 +195,6 @@ int getAllowedOffset(DIRECTION direction, int offset) {
 		secondPosition = clientRect.left;
 		break;
 	case RIGHT:
-		l
-
 		firstPosition = clientRect.right;
 		secondPosition = movableRect.right + offset;
 		break;
