@@ -16,7 +16,6 @@
 #define PAINT 200
 
 const int IDM_Rectangle = 0;
-const int IDM_Picture = 1;
 const int IDM_Cut = 2;
 const int rect_size = 50;
 const int x_chor = 100;
@@ -27,16 +26,17 @@ RECT movableRect = { x_chor, y_chor, x_chor + 50, y_chor + 50 };
 RECT clientRect;
 
 const HBRUSH MOVABLE_RECT_BRUSH = CreateSolidBrush(RGB(100, 149, 237));
+const HBRUSH WINDOW_RECT_BRUSH = CreateSolidBrush(RGB(255, 245, 238));
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
 void dragMovableRect(DIRECTION direction, int offset);
 int getAllowedOffset(DIRECTION direction, int offset);
+void correctChordsMouse();
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
-	/////////////////////////////////////////////////////
-#pragma region 
+	#pragma region 
 	const wchar_t CLASS_NAME[] = L"Sample Window Class";
 	WNDCLASS wc = { };
 	wc.lpfnWndProc = WindowProc;
@@ -59,50 +59,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	{
 		return 0;
 	}
-#pragma endregion homeWindow
+	#pragma endregion CreatingMainWindow
 	ShowWindow(hwnd, nCmdShow);
-	/// ////////////////////////////////////////////////////
-#pragma region childWindow
-	HWND child;
-	WNDCLASSEX wchcl;
-	const wchar_t CLASS_NAME2[] = L"Dialog box";
-	wchcl.cbSize = sizeof(wchcl);
-	wchcl.style = CS_HREDRAW | CS_HREDRAW;
-	wchcl.lpfnWndProc = ChildProc;
-	wchcl.cbClsExtra = 0;
-	wchcl.cbWndExtra = 0;
-	wchcl.hInstance = hInstance;
-	wchcl.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-	wchcl.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wchcl.hbrBackground = (HBRUSH)COLOR_BACKGROUND;
-	wchcl.lpszMenuName = NULL;
-	wchcl.lpszClassName = CLASS_NAME2;
-	wchcl.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
-	if (!RegisterClassEx(&wchcl))
-		return 0;
-
-	child = CreateWindowEx(
-		0,
-		CLASS_NAME2,
-		CLASS_NAME2,
-		WS_OVERLAPPEDWINDOW,
-		0, 0, 150, 150,
-		hwnd,        /* The window is a child-window to desktop */
-		NULL,                /* No menu */
-		hInstance,       /* Program Instance handler */
-		NULL                 /* No Window Creation data */
-	);
-#pragma endregion childWindow
-	/*ShowWindow(child, SW_SHOWNORMAL);*/
-
-	///////////////////////////////////////////////////////
 	MSG msg = { };
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
-
 	return 0;
 }
 
@@ -113,12 +77,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	switch (uMsg)
 	{
 	case WM_PAINT:
+	{
 		hdc = BeginPaint(hwnd, &paintStruct);
 		GetClientRect(hwnd, &clientRect);
-		FillRect(hdc, &clientRect, 0);
+		FillRect(hdc, &clientRect, WINDOW_RECT_BRUSH);
 		FillRect(hdc, &movableRect, MOVABLE_RECT_BRUSH);
 		EndPaint(hwnd, &paintStruct);
 		break;
+	}
 	case WM_KEYDOWN:
 		switch (wParam) {
 		case VK_LEFT:
@@ -136,6 +102,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		}
 		InvalidateRect(hwnd, &clientRect, false);
 		break;
+	case WM_MOUSEMOVE: 
+	{
+		int mouseXPos = LOWORD(lParam) - (rect_size / 2);
+		int mouseYPos = HIWORD(lParam) - (rect_size / 2);
+
+		if ((mouseXPos > 0)
+			&& (mouseXPos < clientRect.right - rect_size)
+			&& (mouseYPos > 0)
+			&& (mouseYPos < clientRect.bottom - rect_size)) {
+
+			if (movableRect.top <= mouseYPos)  dragMovableRect(DOWN, mouseYPos - movableRect.top);
+			if (movableRect.left >= mouseXPos) dragMovableRect(LEFT, movableRect.left - mouseXPos);
+			if (movableRect.top >= mouseYPos)  dragMovableRect(UP, movableRect.top - mouseYPos);
+			if (movableRect.left <= mouseXPos)	dragMovableRect(RIGHT, mouseXPos - movableRect.left);
+		}
+
+		correctChordsMouse();
+		InvalidateRect(hwnd, &clientRect, false);
+		break;
+	}
+	case WM_MOUSEWHEEL:
+	{
+		GET_KEYSTATE_WPARAM(wParam) == MK_SHIFT ?
+			GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? dragMovableRect(RIGHT, SINGLE_STEP_PIXELS) : dragMovableRect(LEFT, SINGLE_STEP_PIXELS) :
+			GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? dragMovableRect(UP, SINGLE_STEP_PIXELS) : dragMovableRect(DOWN, SINGLE_STEP_PIXELS);
+		InvalidateRect(hwnd, &clientRect, false);
+		break;
+	}
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
@@ -205,4 +199,11 @@ int getAllowedOffset(DIRECTION direction, int offset) {
 	}
 
 	return offset;
+}
+
+void correctChordsMouse() {
+	if (movableRect.left <= clientRect.left + 3) dragMovableRect(RIGHT, 20);
+	if (movableRect.top <= clientRect.top + 3) dragMovableRect(DOWN, 20);
+	if (movableRect.right >= clientRect.right - 3) dragMovableRect(LEFT, 20);
+	if (movableRect.bottom >= clientRect.bottom - 3) dragMovableRect(UP, 20);
 }
