@@ -11,16 +11,23 @@
 #define UP 4
 #define RIGHT 8
 #define DOWN 12
-
+#define TIME_NOT_MOVES 5
 #define RECTANGLE 100
 #define PAINT 200
+#define WM_RANDMOV (WM_APP + 1)
 
 const int IDM_Rectangle = 0;
 const int IDM_Cut = 2;
 const int rect_size = 50;
 const int x_chor = 100;
 const int y_chor = 100;
-int status;
+const int IDT_MOUSETRAP = 1;
+const int period = 100;
+const int ellapsedTimeToMove = 10000;
+int timePassed = 0;
+UINT uResult;
+DIRECTION xDirection = RIGHT;
+DIRECTION yDirection = UP;
 
 RECT movableRect = { x_chor, y_chor, x_chor + 50, y_chor + 50 };
 RECT clientRect;
@@ -30,13 +37,16 @@ const HBRUSH WINDOW_RECT_BRUSH = CreateSolidBrush(RGB(255, 245, 238));
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
+void getOffset(DIRECTION direction, int offset, LONG& firstPosition, LONG& secondPosition);
 void dragMovableRect(DIRECTION direction, int offset);
 int getAllowedOffset(DIRECTION direction, int offset);
 void correctChordsMouse();
+void randomMove();
+void setDirection(int offset);
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
-	#pragma region 
+#pragma region 
 	const wchar_t CLASS_NAME[] = L"Sample Window Class";
 	WNDCLASS wc = { };
 	wc.lpfnWndProc = WindowProc;
@@ -59,8 +69,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	{
 		return 0;
 	}
-	#pragma endregion CreatingMainWindow
+#pragma endregion CreatingMainWindow
 	ShowWindow(hwnd, nCmdShow);
+	uResult = SetTimer(hwnd,
+		IDT_MOUSETRAP,
+		period,
+		(TIMERPROC)NULL);
+	if (uResult == 0)
+	{
+		return 0;
+	}
+
 	MSG msg = { };
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
@@ -86,6 +105,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		break;
 	}
 	case WM_KEYDOWN:
+		timePassed = 0;
 		switch (wParam) {
 		case VK_LEFT:
 			dragMovableRect(LEFT, SINGLE_STEP_PIXELS);
@@ -102,11 +122,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		}
 		InvalidateRect(hwnd, &clientRect, false);
 		break;
-	case WM_MOUSEMOVE: 
+	case WM_MOUSEMOVE:
 	{
+		timePassed = 0;
 		int mouseXPos = LOWORD(lParam) - (rect_size / 2);
 		int mouseYPos = HIWORD(lParam) - (rect_size / 2);
-
 		if ((mouseXPos > 0)
 			&& (mouseXPos < clientRect.right - rect_size)
 			&& (mouseYPos > 0)
@@ -124,6 +144,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_MOUSEWHEEL:
 	{
+		timePassed = 0;
 		GET_KEYSTATE_WPARAM(wParam) == MK_SHIFT ?
 			GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? dragMovableRect(RIGHT, SINGLE_STEP_PIXELS) : dragMovableRect(LEFT, SINGLE_STEP_PIXELS) :
 			GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? dragMovableRect(UP, SINGLE_STEP_PIXELS) : dragMovableRect(DOWN, SINGLE_STEP_PIXELS);
@@ -133,28 +154,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
+	case WM_TIMER:
+		if (timePassed >= ellapsedTimeToMove / period)
+		{
+			randomMove();
+			InvalidateRect(hwnd, &clientRect, false);
+		}
+		else 
+		{
+			timePassed++;
+		}
+
+		break;
 	}
 
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK ChildProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-	switch (uMsg)                  /* handle the messages */
-	{
-	case WM_DESTROY:
-		SendMessage(hwnd, WM_CLOSE, 0, 0);
-		break;
-	default:                      /* for messages that we don't deal with */
-		return DefWindowProc(hwnd, uMsg, wParam, lParam);
-	}
-
-}
-
 void dragMovableRect(DIRECTION direction, int offset) {
 
 	offset = getAllowedOffset(direction, offset);
-
 	switch (direction) {
 	case UP:
 		OffsetRect(&movableRect, 0, -offset);
@@ -171,10 +190,8 @@ void dragMovableRect(DIRECTION direction, int offset) {
 	}
 }
 
-int getAllowedOffset(DIRECTION direction, int offset) {
-	LONG firstPosition;
-	LONG secondPosition;
-
+void getOffset(DIRECTION direction, int offset, LONG& firstPosition, LONG& secondPosition)
+{
 	switch (direction) {
 	case UP:
 		firstPosition = movableRect.top - offset;
@@ -193,6 +210,12 @@ int getAllowedOffset(DIRECTION direction, int offset) {
 		secondPosition = movableRect.right + offset;
 		break;
 	}
+}
+
+int getAllowedOffset(DIRECTION direction, int offset) {
+	LONG firstPosition;
+	LONG secondPosition;
+	getOffset(direction, offset, firstPosition, secondPosition);
 
 	if ((secondPosition - firstPosition) > -1) {
 		return -10 * offset;
@@ -201,9 +224,28 @@ int getAllowedOffset(DIRECTION direction, int offset) {
 	return offset;
 }
 
+void setDirection(int offset)
+{
+	if (getAllowedOffset(xDirection, offset) < 0)
+	{
+		xDirection = xDirection == RIGHT ? LEFT : RIGHT;
+	}
+	if (getAllowedOffset(yDirection, offset) < 0)
+	{
+		yDirection = yDirection == UP ? DOWN : UP;
+	}
+}
+
 void correctChordsMouse() {
 	if (movableRect.left <= clientRect.left + 3) dragMovableRect(RIGHT, 20);
 	if (movableRect.top <= clientRect.top + 3) dragMovableRect(DOWN, 20);
 	if (movableRect.right >= clientRect.right - 3) dragMovableRect(LEFT, 20);
 	if (movableRect.bottom >= clientRect.bottom - 3) dragMovableRect(UP, 20);
+}
+
+void randomMove()
+{
+	setDirection(SINGLE_STEP_PIXELS);
+	dragMovableRect(xDirection, SINGLE_STEP_PIXELS);
+	dragMovableRect(yDirection, SINGLE_STEP_PIXELS);
 }
