@@ -11,7 +11,6 @@
 #define UP 4
 #define RIGHT 8
 #define DOWN 12
-#define TIME_NOT_MOVES 5
 #define RECTANGLE 100
 #define PAINT 200
 #define WM_RANDMOV (WM_APP + 1)
@@ -23,7 +22,7 @@ const int x_chor = 100;
 const int y_chor = 100;
 const int IDT_MOUSETRAP = 1;
 const int period = 100;
-const int ellapsedTimeToMove = 10000;
+const int ellapsedTimeToMove = 5000;
 int timePassed = 0;
 UINT uResult;
 DIRECTION xDirection = RIGHT;
@@ -54,15 +53,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	wc.lpszClassName = CLASS_NAME;
 	RegisterClass(&wc);
 	HWND hwnd = CreateWindowEx(
-		0,                              // Optional window styles.
-		CLASS_NAME,                     // Window class
-		L"Learn to Program Windows",    // Window text
-		WS_OVERLAPPEDWINDOW,            // Window style
-		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,         // Size and position
-		NULL,       // Parent window    
-		NULL,       // Menu
-		hInstance,  // Instance handle
-		NULL        // Additional application data
+		0,                             
+		CLASS_NAME,                   
+		L"Learn to Program Windows",   
+		WS_OVERLAPPEDWINDOW ^ WS_THICKFRAME,
+		CW_USEDEFAULT, CW_USEDEFAULT, 500, 500,        
+		NULL,        
+		NULL,     
+		hInstance,  
+		NULL       
 	);
 
 	if (hwnd == NULL)
@@ -124,22 +123,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_MOUSEMOVE:
 	{
-		timePassed = 0;
-		int mouseXPos = LOWORD(lParam) - (rect_size / 2);
-		int mouseYPos = HIWORD(lParam) - (rect_size / 2);
-		if ((mouseXPos > 0)
-			&& (mouseXPos < clientRect.right - rect_size)
-			&& (mouseYPos > 0)
-			&& (mouseYPos < clientRect.bottom - rect_size)) {
+		if (GET_KEYSTATE_WPARAM(wParam) == VK_LBUTTON)
+		{
+			timePassed = 0;
+			int mouseXPos = LOWORD(lParam) - (rect_size / 2);
+			int mouseYPos = HIWORD(lParam) - (rect_size / 2);
+			if ((mouseXPos > 0)
+				&& (mouseXPos < clientRect.right - rect_size)
+				&& (mouseYPos > 0)
+				&& (mouseYPos < clientRect.bottom - rect_size)) {
 
-			if (movableRect.top <= mouseYPos)  dragMovableRect(DOWN, mouseYPos - movableRect.top);
-			if (movableRect.left >= mouseXPos) dragMovableRect(LEFT, movableRect.left - mouseXPos);
-			if (movableRect.top >= mouseYPos)  dragMovableRect(UP, movableRect.top - mouseYPos);
-			if (movableRect.left <= mouseXPos)	dragMovableRect(RIGHT, mouseXPos - movableRect.left);
+				if (movableRect.top <= mouseYPos)  dragMovableRect(DOWN, mouseYPos - movableRect.top);
+				if (movableRect.left >= mouseXPos) dragMovableRect(LEFT, movableRect.left - mouseXPos);
+				if (movableRect.top >= mouseYPos)  dragMovableRect(UP, movableRect.top - mouseYPos);
+				if (movableRect.left <= mouseXPos)	dragMovableRect(RIGHT, mouseXPos - movableRect.left);
+			}
+
+			correctChordsMouse();
+			InvalidateRect(hwnd, &clientRect, false);
 		}
 
-		correctChordsMouse();
-		InvalidateRect(hwnd, &clientRect, false);
 		break;
 	}
 	case WM_MOUSEWHEEL:
